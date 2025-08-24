@@ -1,8 +1,12 @@
-# OS cruft
+# OS & logs
 .DS_Store
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Node
 node_modules/
+**/node_modules/
 
 # Builds / caches
 dist/
@@ -16,8 +20,10 @@ coverage/
 
 # Env & local config
 .env
+**/.env
 .env.*
 .env.local
+**/.env.local
 .env.*.local
 !.env.example
 
@@ -34,3 +40,7 @@ lecture-to-anki/backend/**/*.mp4
 
 # Editor
 .vscode/
+
+# builds
+dist/
+**/dist/
