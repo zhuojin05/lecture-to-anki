@@ -8,6 +8,7 @@ import sectionsRoute from "./routes/sections.js";
 import cardsRoute from "./routes/cards.js";
 import exportRoute from "./routes/export.js";
 import slidesRoute from "./routes/slides.js";
+import slidesImageRoute from "./routes/slides-image.js";
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -32,6 +33,7 @@ app.use("/api/sections", sectionsRoute);
 app.use("/api/cards", cardsRoute);
 app.use("/api/export", exportRoute);
 app.use("/api/slides", slidesRoute);
+app.use("/api/slides-image", slidesImageRoute);
 
 app.use(errorHandler);
 

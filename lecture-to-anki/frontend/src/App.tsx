@@ -4,7 +4,7 @@ import Progress from "./components/Progress";
 import ProgressBar from "./components/ProgressBar";
 import CardTable from "./components/CardTable";
 import ThemeToggle from "./components/ThemeToggle";
-import { apiTranscribe, apiSections, apiCards, apiExport, apiSlides } from "./lib/api";
+import { apiSlidesImage, apiTranscribe, apiSections, apiCards, apiExport, apiSlides } from "./lib/api";
 import type { Card, CardType, Section } from "./lib/types";
 
 function slugify(s: string) {
@@ -18,15 +18,16 @@ export default function App() {
   const [providedTranscript, setProvidedTranscript] = useState<string>("");
 
   const [waitForTranscribe, setWaitForTranscribe] = useState(true); // switch
+  const [useVisualSlides, setUseVisualSlides] = useState<boolean>(true); // NEW
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
   const [lectureTitle, setLectureTitle] = useState("");
   const [deck, setDeck] = useState("Lecture Cards");
   const [cardType, setCardType] = useState<CardType>("basic");
   const [targetCountInput, setTargetCountInput] = useState<string>("");
+
   const [cards, setCards] = useState<Card[]>([]);
   const [busy, setBusy] = useState(false);
   const [counts, setCounts] = useState({ total: 0 });
-  
 
   // progress bar state
   const [progress, setProgress] = useState<{ pct: number; label: string }>({ pct: 0, label: "Idle" });
@@ -41,7 +42,12 @@ export default function App() {
     const mt = file.type;
 
     // Handle slides (.pdf / .pptx)
-    if (ext === ".pdf" || ext === ".pptx" || mt === "application/pdf" || mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+    if (
+      ext === ".pdf" ||
+      ext === ".pptx" ||
+      mt === "application/pdf" ||
+      mt === "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    ) {
       setSlidesFile(file);
       try {
         setProgress({ pct: 0, label: "Extracting slides text…" });
@@ -62,7 +68,14 @@ export default function App() {
     }
 
     // Handle video/audio (fallback to video)
-    if (mt.startsWith("video/") || mt.startsWith("audio/") || ext === ".mp4" || ext === ".m4a" || ext === ".mp3" || ext === ".wav") {
+    if (
+      mt.startsWith("video/") ||
+      mt.startsWith("audio/") ||
+      ext === ".mp4" ||
+      ext === ".m4a" ||
+      ext === ".mp3" ||
+      ext === ".wav"
+    ) {
       setVideoFile(file);
       return;
     }
@@ -70,6 +83,7 @@ export default function App() {
     alert("Unsupported file type. Please upload .mp4 video, .pdf/.pptx slides, or .txt transcript.");
   }
 
+  // (kept in case you still call it elsewhere)
   async function handleSlidesUpload(file: File) {
     setSlidesFile(file);
     try {
@@ -88,9 +102,21 @@ export default function App() {
     setProvidedTranscript(text);
   }
 
+  function dedupeCards(list: Card[]): Card[] {
+    const seen = new Set<string>();
+    const out: Card[] = [];
+    for (const c of list) {
+      const key = `${(c.question || "").trim().toLowerCase()}::${(c.answer || "").trim().toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(c);
+    }
+    return out;
+  }
+
   async function generate() {
-    if (!videoFile && !providedTranscript) {
-      alert("Please upload a video or paste a transcript.");
+    if (!videoFile && !providedTranscript && !slidesFile) {
+      alert("Please upload at least one of: video, slides, or transcript.");
       return;
     }
 
@@ -110,6 +136,7 @@ export default function App() {
     setStep(1);
     setProgress({ pct: 10, label: "Starting…" });
 
+    // 1) Get transcript segments (or wrap provided transcript)
     let segments: { start: number; end: number; text: string }[] = [];
 
     try {
@@ -126,37 +153,58 @@ export default function App() {
             text: providedTranscript.trim()
           }
         ];
-      } else {
-        alert("Please either wait for transcription or provide a transcript.");
-        setBusy(false);
-        return;
+      } // else: no transcript, but we can still run slides-image only
+
+      // 2) Optionally run visual slide analysis (after we have segments for better timestamps)
+      let imageCards: Card[] = [];
+      if (useVisualSlides && slidesFile) {
+        setProgress({ pct: 55, label: "Analyzing slides visually (GPT-4o) …" });
+        const resp = await apiSlidesImage(slidesFile, {
+          lectureTitle: lectureTitle || slidesFile.name || "Untitled Lecture",
+          lectureSlug,
+          cardType,
+          segments // helps the backend pick precise 10–40s windows
+        });
+        imageCards = (resp.cards || []) as Card[];
       }
 
-      setStep(2);
-      setProgress({ pct: 60, label: "Structuring transcript into sections…" });
-      const secs = await apiSections(
-        segments,
-        lectureTitle || videoFile?.name || slidesFile?.name || "Untitled Lecture",
-        {
+      // 3) Run sections + cards (text-based path) if we have transcript text
+      let textCards: Card[] = [];
+      if (segments.length) {
+        setStep(2);
+        setProgress({ pct: 70, label: "Structuring transcript into sections…" });
+        const secs = await apiSections(
+          segments,
+          lectureTitle || videoFile?.name || slidesFile?.name || "Untitled Lecture",
+          {
+            slidesText: slidesText || undefined,
+            transcriptText: providedTranscript || undefined
+          }
+        );
+
+        setStep(3);
+        setProgress({
+          pct: 85,
+          label: targetCount ? `Writing ${targetCount} cards…` : "Writing exhaustive cards…"
+        });
+        const gen = await apiCards({
+          lectureTitle: lectureTitle || videoFile?.name || slidesFile?.name || "Untitled Lecture",
+          lectureSlug,
+          cardType,
+          targetCount, // undefined = exhaustive
+          sections: (secs.sections as Section[]) || [],
           slidesText: slidesText || undefined,
           transcriptText: providedTranscript || undefined
-        }
-      );
+        });
 
-      setStep(3);
-      setProgress({ pct: 80, label: targetCount ? `Writing ${targetCount} cards…` : "Writing exhaustive cards…" });
-      const gen = await apiCards({
-        lectureTitle: lectureTitle || videoFile?.name || slidesFile?.name || "Untitled Lecture",
-        lectureSlug,
-        cardType,
-        targetCount, // undefined = exhaustive
-        sections: secs.sections as Section[],
-        slidesText: slidesText || undefined,
-        transcriptText: providedTranscript || undefined
-      });
+        textCards = (gen.cards || []) as Card[];
+      }
 
-      setCards(gen.cards);
-      setCounts({ total: gen.cards.length });
+      // 4) Merge & dedupe (prefer cards that have timestamps or slide_index if you want)
+      const merged = dedupeCards([...(imageCards || []), ...(textCards || [])]);
+
+      setCards(merged);
+      setCounts({ total: merged.length });
       setProgress({ pct: 100, label: "Done" });
     } catch (err: any) {
       console.error(err);
@@ -220,7 +268,9 @@ export default function App() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-slate-600 dark:text-slate-300">Exact number of cards (optional)</label>
+                  <label className="block text-sm text-slate-600 dark:text-slate-300">
+                    Exact number of cards (optional)
+                  </label>
                   <input
                     inputMode="numeric"
                     pattern="[0-9]*"
@@ -229,9 +279,22 @@ export default function App() {
                     value={targetCountInput}
                     onChange={(e) => setTargetCountInput(e.target.value.replace(/[^\d]/g, ""))}
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Blank = exhaustive (as many as possible, prioritizing slides).</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Blank = exhaustive (as many as possible, prioritizing slides).
+                  </p>
                 </div>
               </div>
+
+              {/* Toggle for visual slide analysis */}
+              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={useVisualSlides}
+                  onChange={(e) => setUseVisualSlides(e.target.checked)}
+                />
+                Use visual slide analysis (GPT-4o)
+              </label>
+
               <div className="text-xs text-slate-500 dark:text-slate-400">
                 Tags auto-include: <code>lecture:{lectureSlug}</code>, <code>type:{cardType}</code>
               </div>

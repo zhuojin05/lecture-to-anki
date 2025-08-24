@@ -56,3 +56,25 @@ export async function apiExport(format: "tsv" | "csv" | "json", cards: Card[], d
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export async function apiSlidesImage(
+  file: File,
+  opts: {
+    lectureTitle?: string;
+    lectureSlug?: string;
+    cardType?: "basic" | "cloze";
+    segments?: { start: number; end: number; text: string }[];
+  }
+) {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (opts.lectureTitle) fd.append("lectureTitle", opts.lectureTitle);
+  if (opts.lectureSlug) fd.append("lectureSlug", opts.lectureSlug);
+  if (opts.cardType) fd.append("cardType", opts.cardType);
+  if (opts.segments) fd.append("segments", JSON.stringify(opts.segments));
+
+  const BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001";
+  const res = await fetch(`${BASE}/api/slides-image`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  return res.json() as Promise<{ cards: any[]; slides: { index: number }[] }>;
+}
