@@ -194,12 +194,14 @@ export default router.post("/", async (req, res, next) => {
         response_format: { type: "json_object" }
       });
 
-      let content = rsp.choices[0]?.message?.content ?? "";
+      const content = rsp.choices[0]?.message?.content ?? "";
       let parsed: any = {};
       try { parsed = JSON.parse(content); } catch {
         const start = content.indexOf("{"); const end = content.lastIndexOf("}");
         if (start !== -1 && end !== -1 && end > start) {
-          try { parsed = JSON.parse(content.slice(start, end + 1)); } catch {}
+          try { parsed = JSON.parse(content.slice(start, end + 1)); } catch {
+              // no-op; handled by outer retry
+          }
         }
       }
 

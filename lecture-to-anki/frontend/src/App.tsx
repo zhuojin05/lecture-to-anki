@@ -7,7 +7,7 @@
  * Developer review: All generated code was reviewed, tested, and modified by me.
  * Date(s): 2025-08-24
  */
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import CardTable from "./components/CardTable";
 import Dropzone from "./components/Dropzone";

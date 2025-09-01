@@ -91,7 +91,7 @@ async function transcribeWithRetry(audioPath: string) {
 // POST /api/transcribe (multipart) -> { segments: TranscriptSegment[], text: string }
 router.post("/", upload.single("file"), async (req: any, res, next) => {
   const started = Date.now();
-  let cleanupPaths: string[] = [];
+  const cleanupPaths: string[] = [];
   try {
     const file = req.file as Express.Multer.File | undefined;
     if (!file) throw new Error("No file uploaded");
@@ -116,7 +116,8 @@ router.post("/", upload.single("file"), async (req: any, res, next) => {
     );
 
     const t1 = Date.now();
-    const transcription: any = await transcribeWithRetry(audioPath); // <-- use the retry helper
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transcription: any = await transcribeWithRetry(audioPath);
     const t2 = Date.now();
     console.log(`[transcribe] openai took ${(t2 - t1)/1000}s, total ${(t2 - started)/1000}s`);
 

@@ -15,6 +15,8 @@ import unzipper from "unzipper";
 import { XMLParser } from "fast-xml-parser";
 import { createRequire } from "node:module";
 
+
+
 const require = createRequire(import.meta.url);
 // Use CJS require for pdf-parse to avoid the test file issue under tsx/ESM
 const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text?: string }>;
@@ -24,7 +26,8 @@ const router = Router();
 async function extractTextFromPptxBuffer(buf: Buffer): Promise<string> {
   // Read PPTX (a ZIP) and extract text from slide XML ("ppt/slides/slide*.xml")
   const parsed = await unzipper.Open.buffer(buf);
-  const slides = parsed.files.filter((f) => /^ppt\/slides\/slide\d+\.xml$/i.test(f.path));
+  const slides = parsed.files
+    .filter((f: unzipper.ZipEntry) => /^ppt\/slides\/slide\d+\.xml$/i.test(f.path));
   slides.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
 
   const parser = new XMLParser({
@@ -42,17 +45,22 @@ async function extractTextFromPptxBuffer(buf: Buffer): Promise<string> {
     // Collect all text nodes in the slide: <a:t>…</a:t> (now "t")
     const texts: string[] = [];
 
-    function walk(node: any) {
+    function walk(node: unknown) {
       if (!node || typeof node !== "object") return;
-      for (const key of Object.keys(node)) {
-        const val = (node as any)[key];
+      const obj = node as Record<string, unknown>;
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
         if (key === "t") {
           if (typeof val === "string") texts.push(val);
-          else if (val && typeof val === "object" && typeof val.tVal === "string") texts.push(val.tVal);
-        } else if (Array.isArray(val)) {
-          val.forEach(walk);
-        } else if (typeof val === "object") {
-          walk(val);
+          else if (val && typeof val === "object" && typeof (val as { tVal?: unknown }).tVal === "string") {
+            texts.push((val as { tVal?: string }).tVal as string);
+          }
+        } else {
+          if (Array.isArray(val)) {
+            (val as unknown[]).forEach(walk);
+          } else if (typeof val === "object") {
+            walk(val as object);
+          }
         }
       }
     }

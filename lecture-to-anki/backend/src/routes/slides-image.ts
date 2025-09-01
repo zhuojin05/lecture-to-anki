@@ -18,11 +18,17 @@ import sharp from "sharp";
 import pLimit from "p-limit";
 import { upload } from "../middleware/upload.js";
 import { openai, CARDS_MODEL } from "../openai.js";
+import type { TranscriptSegment as Segment, Card } from "../types.js";
 
 const execFileP = promisify(execFile);
 const router = Router();
 
-type Segment = { start: number; end: number; text: string };
+type SlideImage = {
+  index: number;
+  title?: string;
+  imageBase64: string;
+  ocrText?: string;
+};
 
 // --------- utilities ---------
 function mmss(sec: number) {
@@ -167,7 +173,7 @@ async function cardsFromSlideImage(params: {
   ocrText?: string;
   timestamp?: string;
   lectureSlug: string;
-}) {
+}): Promise<Card[]> {
   const { imageBase64, slideIndex, lectureTitle, cardType, ocrText, timestamp, lectureSlug } = params;
 
   const system =
@@ -254,7 +260,7 @@ async function cardsFromSlideImage(params: {
           : (timestamp || ""),
       slide_index: Number.isFinite(c.slide_index) ? c.slide_index : slideIndex,
       source_type: "slides" as const
-    }));
+    })) as Card[];
 
   return cards;
 }
@@ -326,7 +332,7 @@ router.post("/", upload.single("file"), async (req: any, res, next) => {
       )
     );
 
-    const cards = results.flatMap(r => r.cards);
+    const cards: Card[] = results.flatMap(r => r.cards);
     console.log(
       `[slides-image] slides=${jpegPaths.length} -> cards=${cards.length} (avg ${(cards.length / Math.max(1, jpegPaths.length)).toFixed(2)}/slide)`
     );
