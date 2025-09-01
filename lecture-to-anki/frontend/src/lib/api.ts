@@ -1,3 +1,12 @@
+// frontend/src/lib/api.ts
+/**
+ * AI Assistance Notice
+ * Portions of this file were created or refactored with help from AI tools.
+ * Tools/Models: ChatGPT (GPT-5 Thinking), GitHub Copilot
+ * Prompts (summary): “Refactor Express route for slides-first card generation and add retry logic.”
+ * Developer review: All generated code was reviewed, tested, and modified by me.
+ * Date(s): 2025-08-24
+ */
 import type { Section, TranscriptSegment, Card, GenerateCardsRequest } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE || "http://localhost:3001";

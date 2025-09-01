@@ -1,3 +1,12 @@
+// frontend/src/App.tsx
+/**
+ * AI Assistance Notice
+ * Portions of this file were created or refactored with help from AI tools.
+ * Tools/Models: ChatGPT (GPT-5 Thinking), GitHub Copilot
+ * Prompts (summary): “Refactor Express route for slides-first card generation and add retry logic.”
+ * Developer review: All generated code was reviewed, tested, and modified by me.
+ * Date(s): 2025-08-24
+ */
 import React, { useMemo, useState } from "react";
 import Dropzone from "./components/Dropzone";
 import Progress from "./components/Progress";

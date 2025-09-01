@@ -1,26 +1,36 @@
-# Lecture → Anki (Slides‑First MP4 → Flashcards)
+# Lecture → Anki (Slides-First MP4 → Flashcards)
 
-A minimal, clean web app that turns a lecture **.mp4** (plus optional **.pdf/.pptx slides** and/or **.txt transcript**) into high‑yield Anki flashcards. Cards include tags, slide index, and precise timestamps. Slides are treated as the **primary source**.
+A minimal, focused web app that turns a lecture **.mp4** (plus optional **.pdf/.pptx slides** and/or **.txt transcript**) into high-yield Anki flashcards. Cards include slide index, precise timestamps, and sensible tags. **Slides are treated as the primary source** (never skipped).
+
+---
+
+## Overview
+
+- **Slides-first generation** — Every content slide produces ≥ 1 card (prefer 2–4 if warranted). Admin slides (title, refs/bibliography, course admin/housekeeping/outline) are auto-skipped. Learning objectives/outcomes are **kept**.
+- **Accurate timestamps** — Each card includes a **10–40s** `{mm:ss–mm:ss}` window aligned to the lecture audio when possible (keyword/TF-IDF alignment). If alignment fails, cards still get created (timestamp may be empty).
+- **Outside-reading (optional)** — Detects explicit reading suggestions in the transcript and adds extra cards tagged `outside-reading`, using results from Semantic Scholar/Crossref/Brave/SerpAPI (configurable).
+- **Quantity modes** —  
+  - **Exhaustive (default):** As many cards as the material supports.  
+  - **Exact count:** Provide a positive integer to generate precisely that many (still ≥1 per content slide; proportional distribution).
+- **Card types** — Basic (Q/A) or Cloze (`{{c1::...}}` syntax).
+- **Great UX** — Resizable columns (persisted), wide Question/Answer by default, inline editing with Undo, filter, per-row delete (trash icon), dark mode, progress + status labels.
+- **Exports** — TSV / CSV / JSON (UTF-8). TSV/CSV columns: `Question<TAB>Answer<TAB>Tags<TAB>SourceTimestamp`.
+
+---
 
 ## Stack
-- **Frontend:** React + Vite + TypeScript + TailwindCSS
-- **Backend:** Node.js + Express + TypeScript
-- **AI:** OpenAI Whisper (or 4o‑transcribe) for transcription; GPT‑4o/“gpt‑5‑mini” family for sectioning + card generation
 
-## Key Features
-- **Slides‑first generation:** Every content slide (PDF/PPTX) yields ≥1 card (prefer 2–4 if warranted). Admin slides (title/refs/course admin/housekeeping/outline) are skipped automatically.  
-- **Accurate timestamps:** Each card includes a 10–40s `{mm:ss–mm:ss}` window aligned to the lecture audio when possible.
-- **Outside‑reading (optional):** Detects explicit reading suggestions in the transcript and adds cards tagged `outside-reading` using results from Semantic Scholar/Crossref/Brave/SerpAPI (configurable).
-- **Quantity modes:**  
-  - **Exhaustive (default):** As many cards as the material supports.  
-  - **Exact count:** Provide a positive integer to generate precisely that many (still ≥1 per content slide; distributed proportionally).
-- **Card types:** Basic (Q/A) or Cloze (Anki `{{c1::...}}`).
-- **Inline editing:** Spreadsheet‑like table with Undo, filter, per‑row delete, chips for Slide # and Source type.
-- **Resizable columns:** Q (~50%) and A (~35–40%) are wide by default; Tags/Source narrow; widths are draggable and saved to localStorage.
-- **Dark mode + soft accents:** Modern, accessible UI; progress indicator and status labels.
-- **Exports:** TSV / CSV / JSON (UTF‑8). TSV/CSV columns: `Question<TAB>Answer<TAB>Tags<TAB>SourceTimestamp`.
+- **Frontend:** React + Vite + TypeScript + TailwindCSS  
+- **Backend:** Node.js + Express + TypeScript  
+- **AI:**  
+  - Transcription: OpenAI Whisper (`whisper-1`) or `gpt-4o-transcribe`  
+  - Sectioning + Cards: GPT-4o family or `gpt-5-mini`  
+  - Visual slide analysis (optional path): GPT-4o with image inputs
 
-## Data Model (Cards)
+---
+
+## Data Model
+
 ```ts
 type SourceType = "slides" | "transcript" | "outside";
 
@@ -41,30 +51,75 @@ export type Card = {
 };
 ```
 
+---
+
 ## API Endpoints
-- `POST /api/transcribe` — multipart upload of `.mp4`/audio, returns Whisper segments with timestamps.
-- `POST /api/slides` — upload `.pdf` or `.pptx`; returns `{ slides: [{ index, title?, text }] }` and a joined `text` field for backward compatibility.
-- `POST /api/sections` — groups transcript into coherent sections (2–5 min) with key points (LLM).
-- `POST /api/cards` — **slides‑first** card generation. Accepts slides array, transcript sections, `cardType`, optional `targetCount`, and optional `slidesText`/`transcriptText`. Uses concurrency (4) + retries, `max_completion_tokens`, `response_format: { type: "json_object" }`.
-- `GET /api/export/{tsv|csv|json}` — download current cards.
 
-> Internally, outside‑reading can call a lightweight helper that queries **Semantic Scholar** or **Crossref** (no key), or **Brave/SerpAPI** if keys are provided.
+- `POST /api/transcribe`  
+  Multipart upload of `.mp4`/audio → Whisper segments with timestamps. If using `gpt-4o-transcribe`, segments may be absent; the app falls back gracefully.
 
-## Setup
+- `POST /api/slides`  
+  Upload `.pdf` or `.pptx`. Returns:
+  ```json
+  {
+    "slides": [{ "index": 1, "title": "string?", "text": "string" }, ...],
+    "text": "joined text for backward compatibility"
+  }
+  ```
 
-### 0) Requirements
-- Node 20+ (or 18+ with `--experimental-fetch`)
+- `POST /api/sections`  
+  Groups transcript into coherent sections (2–5 min) with key points (LLM pre-processing), strict JSON output.
+
+- `POST /api/cards`  
+  **Slides-first card generation**. Accepts slides array, transcript sections, `cardType`, optional `targetCount`, and optional `slidesText`/`transcriptText`. Uses:
+  - Concurrency limiter (4)
+  - Exponential backoff for 429/5xx/network
+  - `max_completion_tokens` (⚠️ not `max_tokens`)
+  - Strict `response_format: { "type": "json_object" }`
+
+- `POST /api/slides-image` *(optional visual path)*  
+  Upload `.pdf`/`.pptx`; server converts pages to images and asks GPT-4o (vision) to produce per-slide cards using the same schema/prompt discipline. Helpful when text extraction is lossy.
+
+- `GET /api/export/{tsv|csv|json}`  
+  Downloads the current cards. TSV/CSV columns are `Question<TAB>Answer<TAB>Tags<TAB>SourceTimestamp` (UTF-8).
+
+> Outside-reading is invoked internally when the transcript suggests references. Provider is configurable (`semanticscholar`, `crossref`, `brave`, `serpapi`).
+
+---
+
+## AI Assistance
+
+I used AI tools to **assist** (not replace) parts of this project:
+
+- Tools/Models: ChatGPT (GPT-5 Thinking), GitHub Copilot
+- Where used:
+  - Drafting and refactoring some Express routes (slides-first generation, retries)
+  - Suggesting Tailwind class names and the column-resizer approach for the table
+  - Writing scaffolding for timestamp alignment (I completed and tested the final code)
+- How I used them:
+  - I wrote the specs/prompts, generated suggestions, then **reviewed, edited, and tested** all outputs.
+  - I removed inaccuracies and adapted code to the existing architecture.
+- No proprietary or private data (e.g., API keys) was shared with AI tools.
+
+---
+
+## Install & Run
+
+### Requirements
+
+- Node **20+** (or Node 18+ with `--experimental-fetch`)
 - `ffmpeg` (bundled via `ffmpeg-static`)
-- An OpenAI API key
+- An **OpenAI API key**
 
 ### 1) Install
+
 ```bash
 # repo root
 pnpm i || npm i
 
 # backend
 cd lecture-to-anki/backend
-cp .env.example .env         # fill with your keys (DO NOT COMMIT)
+cp .env.example .env           # fill in your keys (DO NOT COMMIT)
 pnpm i || npm i
 pnpm dev   # or: npm run dev
 
@@ -78,9 +133,12 @@ pnpm dev   # or: npm run dev
 - Frontend: http://localhost:5173
 
 ### 2) Environment (backend/.env)
+
 ```env
 # OpenAI
 OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+
+# Models
 OPENAI_TRANSCRIBE_MODEL=whisper-1          # or gpt-4o-transcribe (no segments)
 OPENAI_SECTIONS_MODEL=gpt-5-mini           # or gpt-4o-mini / gpt-4o
 OPENAI_CARDS_MODEL=gpt-5-mini              # or gpt-4o / gpt-4o-mini
@@ -92,62 +150,87 @@ MAX_UPLOAD_MB=2048
 # Outside reading (optional)
 OUTSIDE_READING_ENABLED=true
 LITERATURE_PROVIDER=semanticscholar        # semanticscholar|crossref|brave|serpapi
-BRAVE_API_KEY=                             # optional
-SERPAPI_KEY=                               # optional
-OUTSIDE_READING_MAX=20
+BRAVE_API_KEY=                             # optional (for brave)
+SERPAPI_KEY=                               # optional (for serpapi)
+OUTSIDE_READING_MAX=20                     # hard cap (default 20)
 ```
 
-> Keep **`.env` out of Git**. Commit only `backend/.env.example` with placeholders.
+> Keep `.env` local and untracked. Push protection will block secrets if they slip into Git.
+
+---
 
 ## Usage
-1. Open the frontend, upload one or more of: **.mp4**, **.pdf/.pptx**, **.txt transcript**.  
-2. Choose **Card type** (Basic/Cloze).  
-3. Optional: set an **Exact number of cards** (leave blank for exhaustive).  
-4. Click **Generate**. You’ll see: *Transcribing → Structuring → Writing Cards*.  
-5. Review and edit in the table (wide Q/A columns, resizable).  
-6. Export **TSV** for Anki (recommended), or CSV/JSON.
+
+1. Open the frontend and upload any of:
+   - **.mp4** (lecture), **.pdf/.pptx** (slides), **.txt** (transcript)
+2. Choose **Card type** (Basic/Cloze).
+3. Optional: **Exact number of cards** — enter a positive integer; leave blank for the exhaustive mode.
+4. Click **Generate**. Progress: *Transcribing → Structuring → Writing Cards*.
+5. Review/edit in the table:
+   - **Resizable columns** (persisted): Question ~50%, Answer ~35–40%, Tags ~10%, Source ~5%
+   - Inline editing, filter, Undo (Cmd/Ctrl+Z), Delete (trash).
+   - Slide # and Source-type chips per row.
+6. Export **TSV** (recommended for Anki), or CSV/JSON.
 
 ### Importing into Anki
-- Use **TSV**, UTF‑8, fields mapped to:
+
+- Import TSV (UTF-8). Map fields:
   - Front: **Question**
   - Back: **Answer**
   - Tags: **Tags**
-  - Extra field (optional): **SourceTimestamp**
-- Cloze notes use Anki syntax `{{c1::...}}`.
+  - Extra/optional: **SourceTimestamp**
+- Cloze cards use standard Anki cloze syntax: `{{c1::...}}`.
 
-## Design Details
+---
 
-### Slides‑first logic
-- Every **content** slide (PDF/PPTX) produces ≥1 card.  
-- Admin slides auto‑skipped by heuristics: “References”, “Bibliography”, “Reading list”, “Course info”, “Assessment”, “Housekeeping”, “Outline”.  
-- “Learning objectives/outcomes” are **kept** as content.  
-- If transcript alignment fails (e.g., early segments), slides still generate cards with blank/coarse timestamps.
+## Design Notes
+
+### Slides-first rule
+
+- For each **content** slide, generate ≥ 1 card (prefer 2–4 if warranted by content density).
+- Admin slides are skipped when titles include: “References”, “Bibliography”, “Reading list”, “Course info”, “Assessment”, “Housekeeping”, “Outline”.  
+  *“Learning objectives/outcomes” are treated as content, not admin.*
+- When slide vs transcript conflict, **prefer slides**; transcript enriches with examples/clarifications only.
+- If alignment fails (e.g., early minutes), slide-based cards are still created; timestamps may be blank.
 
 ### Timestamp alignment
-- A fast keyword‑overlap/TF‑IDF matcher aligns slide text to transcript segments and picks a **10–40s** window.  
-- If nothing matches confidently, timestamp may be empty.
 
-### Outside‑reading
-- Triggered by phrases like “see paper by…”, “read the review…”, etc.  
-- Fetches 2–5 peer‑reviewed items; creates cards tagged `outside-reading` with citation list in `citations`.  
+- Fast keyword/TF-IDF overlap between slide text and transcript segments picks the best **10–40s** window.
+- If no confident match, timestamp is omitted — but the card is still generated.
+
+### Outside-reading
+
+- Triggered by lecturer phrases like “see paper by…”, “read the review…”, etc.
+- Fetches 2–5 peer-reviewed items; generates extra cards tagged `outside-reading` with `citations`.
 - Capped by `OUTSIDE_READING_MAX`.
 
-### Robust prompting
-- Uses `response_format: { type: "json_object" }`.  
-- Uses `max_completion_tokens` (not `max_tokens`).  
-- Omits `temperature` for models that only accept defaults.
+### Prompting hygiene
+
+- Uses `response_format: { "type": "json_object" }` for strict parsing.
+- Uses `max_completion_tokens` (not `max_tokens`).
+- Omits `temperature` for models that only accept defaults (prevents 400s).
+
+---
 
 ## Troubleshooting
-- **“Unsupported parameter: max_tokens”** → ensure `max_completion_tokens` is used.
-- **Temperature error** → remove `temperature` for models that don’t support it (default 1).
-- **Transcription 400** → if using `gpt-4o-transcribe`, segment array may be missing; fallback creates a single segment.
-- **ECONNRESET/429** → built‑in retry with exponential backoff; try again or reduce file size.
-- **No early‑lecture cards** → verify slides were uploaded; slides‑first generation ensures ≥1 card per content slide.
-- **Big tags column** → table now defaults to wide Q/A and resizable columns (saved to localStorage).
 
-## Security
-- Never commit secrets. Keep `.env` local.  
-- Push protection may block secrets; if that happens, rotate the key and rewrite history (`git filter-repo --replace-text`).
+- **“Unsupported parameter: max_tokens”** → switch to `max_completion_tokens`.
+- **“temperature not supported”** → remove `temperature` for that model (defaults to 1).
+- **Transcription 400** → `gpt-4o-transcribe` may return only text (no segments); fallback logic creates a single segment so you still get sections/cards.
+- **ECONNRESET/429** → automatic retries/backoff are built-in; re-try or reduce file size/length.
+- **No early-lecture cards** → upload slides; slides-first ensures ≥ 1 card per content slide even with missing timestamps.
+- **Tags column too wide** → table now defaults to wide Q/A; columns are draggable and remembered.
+
+---
+
+## Security / Git Hygiene
+
+- Never commit `.env` or secrets.  
+- Keep only `backend/.env.example` (placeholders) in Git.  
+- If push protection blocks a secret, rotate the key and rewrite history if needed.
+
+---
 
 ## License
+
 MIT

@@ -1,3 +1,12 @@
+// backend/src/routes/slides.ts
+/**
+ * AI Assistance Notice
+ * Portions of this file were created or refactored with help from AI tools.
+ * Tools/Models: ChatGPT (GPT-5 Thinking), GitHub Copilot
+ * Prompts (summary): “Refactor Express route for slides-first card generation and add retry logic.”
+ * Developer review: All generated code was reviewed, tested, and modified by me.
+ * Date(s): 2025-08-24
+ */
 import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,7 +16,7 @@ import { XMLParser } from "fast-xml-parser";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-// ✅ Use CJS require for pdf-parse to avoid the test file issue under tsx/ESM
+// Use CJS require for pdf-parse to avoid the test file issue under tsx/ESM
 const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text?: string }>;
 
 const router = Router();

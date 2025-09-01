@@ -10,6 +10,8 @@ export type Section = {
 };
 
 export type Card = {
+  slide_index: any;
+  source_type: string;
   question: string;
   answer: string;
   tags: string[];
