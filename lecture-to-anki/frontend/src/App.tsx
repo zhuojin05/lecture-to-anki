@@ -8,10 +8,11 @@
  * Date(s): 2025-08-24
  */
 import React, { useMemo, useState } from "react";
+
+import CardTable from "./components/CardTable";
 import Dropzone from "./components/Dropzone";
 import Progress from "./components/Progress";
 import ProgressBar from "./components/ProgressBar";
-import CardTable from "./components/CardTable";
 import ThemeToggle from "./components/ThemeToggle";
 import { apiSlidesImage, apiTranscribe, apiSections, apiCards, apiExport, apiSlides } from "./lib/api";
 import type { Card, CardType, Section } from "./lib/types";

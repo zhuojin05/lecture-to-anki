@@ -8,6 +8,7 @@
  * Date(s): 2025-08-24
  */
 import React, { useMemo, useState } from "react";
+
 import { useColumnResizer, DEFAULT_WIDTHS } from "../hooks/useColumnResizer";
 import type { Card } from "../lib/types";
 
