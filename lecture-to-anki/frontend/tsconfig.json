@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.node.json",
   "compilerOptions": {
+    "noEmit": true,
     "jsx": "react-jsx",
     "baseUrl": "./src",
     "target": "ES2022",
@@ -14,6 +15,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
     "skipLibCheck": true
   },
   "include": [

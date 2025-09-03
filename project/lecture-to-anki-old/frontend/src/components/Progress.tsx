@@ -22,7 +22,6 @@ export default function Progress({ step = 0, labels = DEFAULT_STEPS }: Props) {
           const number = idx + 1 as 1 | 2 | 3 | 4;
           const isCompleted = clamped > number;
           const isCurrent = clamped === number;
-          const isUpcoming = clamped < number;
 
           // Circle styles
           const circle =
